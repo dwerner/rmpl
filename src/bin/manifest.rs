@@ -20,6 +20,7 @@ pub struct PackageManifest {
     pub edition: String,
     pub description: Option<String>,
     pub src_dir: PathBuf,
+    pub proc_macro: bool,
     pub bins: Vec<BinaryTarget>,
     pub lib: Option<LibraryTarget>,
     pub tests: Vec<TestTarget>,
@@ -140,27 +141,30 @@ impl WorkspaceManifest {
                         }
                     }
                 }
-                "target" => {
-                    if trimmed.starts_with("debug:") {
-                        target.debug = PathBuf::from(extract_value(trimmed));
-                    } else if trimmed.starts_with("release:") {
-                        target.release = PathBuf::from(extract_value(trimmed));
-                    }
-                }
                 "profiles" => {
-                    if !trimmed.starts_with(' ') && trimmed.ends_with(':') {
+                    if !trimmed.starts_with(' ') && trimmed.ends_with(':') && !trimmed.starts_with('-') {
                         current_profile_name = trimmed.trim_end_matches(':').to_string();
                         in_profile = true;
+                        profiles.insert(current_profile_name.clone(), Profile {
+                            target: PathBuf::from(format!("target/{}", current_profile_name)),
+                            opt_level: 0,
+                            debug: false,
+                            lto: false,
+                            strip: false,
+                        });
                     } else if in_profile {
                         let profile = profiles.entry(current_profile_name.clone())
                             .or_insert(Profile {
+                                target: PathBuf::from(format!("target/{}", current_profile_name)),
                                 opt_level: 0,
                                 debug: false,
                                 lto: false,
                                 strip: false,
                             });
                         
-                        if trimmed.starts_with("opt_level:") {
+                        if trimmed.starts_with("target:") {
+                            profile.target = PathBuf::from(extract_value(trimmed));
+                        } else if trimmed.starts_with("opt_level:") {
                             profile.opt_level = extract_value(trimmed).parse().unwrap_or(0);
                         } else if trimmed.starts_with("debug:") {
                             profile.debug = extract_value(trimmed) == "true";
@@ -183,7 +187,6 @@ impl WorkspaceManifest {
             members,
             dependencies,
             profiles,
-            target,
         })
     }
 }
@@ -203,6 +206,7 @@ impl PackageManifest {
             edition: String::from("2021"),
             description: None,
             src_dir: PathBuf::from("src"),
+            proc_macro: false,
             bins: Vec::new(),
             lib: None,
             tests: Vec::new(),
@@ -246,6 +250,8 @@ impl PackageManifest {
                         package.description = Some(extract_value(trimmed));
                     } else if trimmed.starts_with("src_dir:") {
                         package.src_dir = PathBuf::from(extract_value(trimmed));
+                    } else if trimmed.starts_with("proc-macro:") {
+                        package.proc_macro = extract_value(trimmed) == "true";
                     }
                 }
                 "bin" => {
@@ -261,6 +267,12 @@ impl PackageManifest {
                     } else if trimmed.starts_with("path:") {
                         // Path is relative to src_dir
                         current_bin_path = extract_value(trimmed);
+                    }
+                }
+                "lib" => {
+                    if trimmed.starts_with("path:") {
+                        let lib_path = PathBuf::from(extract_value(trimmed));
+                        package.lib = Some(LibraryTarget { path: lib_path });
                     }
                 }
                 "dependencies" => {
@@ -287,8 +299,8 @@ impl PackageManifest {
             });
         }
         
-        // Default to src/main.rs if no bins specified
-        if package.bins.is_empty() {
+        // Default to src/main.rs if no bins specified and no lib
+        if package.bins.is_empty() && package.lib.is_none() {
             package.bins.push(BinaryTarget {
                 name: package.name.clone(),
                 path: PathBuf::from("src/main.rs"),

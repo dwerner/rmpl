@@ -52,7 +52,16 @@ phase_3_build_pipeline:
     - id: p3t3
       description: Implement build caching
       status: pending
-  notes: "workspace.yaml now supports target.debug and target.release paths"
+    - id: p3t4
+      description: Support both lib and bin in same package
+      status: completed
+    - id: p3t5
+      description: Support proc-macro crates
+      status: completed
+    - id: p3t6
+      description: Implement install subcommand
+      status: completed
+  notes: "Installs binaries to ~/.rmpl/bin, adds to PATH in .zshrc/.bashrc"
 
 phase_4_test_bench:
   description: Test and benchmark support

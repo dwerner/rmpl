@@ -1,0 +1,12 @@
+package:
+  name: "hello_macro"
+  version: "0.1.0"
+  edition: "2021"
+  description: "A procedural macro crate"
+  proc-macro: true
+
+lib:
+  path: "src/lib.rs"
+
+dependencies:
+  proc-macro: "builtin"

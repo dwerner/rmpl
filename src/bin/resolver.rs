@@ -92,6 +92,14 @@ impl ResolvedWorkspace {
             visited.insert(name.to_string(), false); // Mark as being processed
             
             if let Some(pkg) = packages.get(name) {
+                // Proc macros must be built first - prioritize them
+                if pkg.manifest.proc_macro {
+                    // Proc macros have no local dependencies in this simple model
+                    visited.insert(name.to_string(), true);
+                    order.insert(0, name.to_string());
+                    return Ok(());
+                }
+                
                 for dep in &pkg.dependencies {
                     let dep_name = dep.split(' ').next().unwrap_or(dep);
                     // Only visit if it's a local package we're building
@@ -112,6 +120,17 @@ impl ResolvedWorkspace {
                 visit(name, packages, &mut visited, &mut order)?;
             }
         }
+        
+        // Ensure proc macros come first
+        order.sort_by(|a, b| {
+            let a_is_proc = packages.get(a).map(|p| p.manifest.proc_macro).unwrap_or(false);
+            let b_is_proc = packages.get(b).map(|p| p.manifest.proc_macro).unwrap_or(false);
+            match (a_is_proc, b_is_proc) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => std::cmp::Ordering::Equal,
+            }
+        });
         
         Ok(order)
     }

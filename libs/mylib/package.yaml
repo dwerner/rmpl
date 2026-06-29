@@ -1,0 +1,14 @@
+package:
+  name: "mylib"
+  version: "0.1.0"
+  edition: "2021"
+  description: "A simple library with demo binary"
+
+lib:
+  path: "src/lib.rs"
+
+bin:
+  - name: "demo"
+    path: "bin/demo.rs"
+
+dependencies: {}

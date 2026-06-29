@@ -3,6 +3,8 @@ workspace:
   name: "rmpl"
   members:
     - "."
+    - "libs/mylib"
+    - "macros/hello_macro"
   
   profiles:
     debug:
