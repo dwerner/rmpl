@@ -1,0 +1,11 @@
+package:
+  name: "simple"
+  version: "0.1.0"
+  edition: "2021"
+  description: "Simple test package"
+
+bin:
+  - name: "simple"
+    path: "main.rs"
+
+dependencies: {}

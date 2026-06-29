@@ -1,0 +1,11 @@
+package:
+  name: "rmpl"
+  version: "0.1.0"
+  edition: "2021"
+  description: "A YAML-based monorepo build tool to replace cargo"
+
+bin:
+  - name: "rmpl"
+    path: "bin/main.rs"
+
+dependencies: {}

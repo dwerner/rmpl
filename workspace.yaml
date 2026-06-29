@@ -1,0 +1,15 @@
+workspace:
+  root: "."
+  name: "rmpl"
+  members:
+    - "."
+  
+  profiles:
+    debug:
+      target: "target/debug"
+      opt_level: 0
+      debug: true
+    release:
+      target: "target/release"
+      opt_level: 3
+      debug: false

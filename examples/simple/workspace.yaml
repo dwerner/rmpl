@@ -1,0 +1,17 @@
+workspace:
+  root: "."
+  name: "simple"
+  members:
+    - "."
+  
+  target:
+    debug: "target/debug"
+    release: "target/release"
+
+profiles:
+  release:
+    opt_level: 3
+    debug: false
+  debug:
+    opt_level: 0
+    debug: true
