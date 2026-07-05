@@ -6,6 +6,7 @@ mod workspace;
 mod build;
 mod resolver;
 mod install;
+mod test;
 
 use std::env;
 use std::process;
@@ -21,6 +22,10 @@ fn main() {
     let command = &args[0];
     let profile = args.get(1).map(|s| s.as_str()).unwrap_or("debug");
     let force = args.iter().any(|a| a == "--force" || a == "-f");
+    let filter = args.iter()
+        .position(|a| a == "--filter")
+        .and_then(|i| args.get(i + 1))
+        .map(|s| s.as_str());
     
     match command.as_str() {
         "build" => {
@@ -32,6 +37,12 @@ fn main() {
         "install" => {
             if let Err(e) = install::install_workspace(profile, force) {
                 eprintln!("Install error: {}", e);
+                process::exit(1);
+            }
+        }
+        "test" => {
+            if let Err(e) = test::run_tests(env::current_dir().unwrap(), filter) {
+                eprintln!("Test error: {}", e);
                 process::exit(1);
             }
         }
@@ -55,5 +66,6 @@ fn print_usage() {
     println!("  build [debug|release]  Build the workspace (default: debug)");
     println!("  install [debug|release]  Install binaries to ~/.rmpl/bin");
     println!("                         Options: --force, -f");
+    println!("  test [--filter NAME]   Run tests (supports --filter for test name)");
     println!("  help                   Show this help message");
 }

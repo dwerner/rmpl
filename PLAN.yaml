@@ -65,20 +65,21 @@ phase_3_build_pipeline:
 
 phase_4_test_bench:
   description: Test and benchmark support
-  status: pending
+  status: in_progress
   tasks:
     - id: p4t1
       description: Implement test discovery
-      status: pending
+      status: completed
     - id: p4t2
       description: Implement test execution
-      status: pending
+      status: completed
     - id: p4t3
       description: Implement benchmark discovery
       status: pending
     - id: p4t4
       description: Implement benchmark execution
       status: pending
+  notes: "Supports inline tests, integration tests, and --filter"
 
 phase_5_cargo_compat:
   description: Cargo subcommand compatibility layer

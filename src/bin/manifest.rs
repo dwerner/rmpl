@@ -275,6 +275,31 @@ impl PackageManifest {
                         package.lib = Some(LibraryTarget { path: lib_path });
                     }
                 }
+                "test" => {
+                    if trimmed.starts_with("- name:") {
+                        // Multiple test targets
+                        let test_name = extract_value(trimmed);
+                        // Look for path on next line
+                        if i + 1 < lines.len() {
+                            let next_line = lines[i + 1].trim();
+                            if next_line.starts_with("path:") {
+                                let test_path = PathBuf::from(extract_value(next_line));
+                                package.tests.push(TestTarget {
+                                    name: test_name,
+                                    path: test_path,
+                                });
+                                i += 1; // Skip the path line we just read
+                            }
+                        }
+                    } else if trimmed.starts_with("path:") {
+                        // Single test target with just path
+                        let test_path = PathBuf::from(extract_value(trimmed));
+                        package.tests.push(TestTarget {
+                            name: format!("{}_test", package.name),
+                            path: test_path,
+                        });
+                    }
+                }
                 "dependencies" => {
                     if trimmed.contains(':') {
                         let parts: Vec<&str> = trimmed.split(':').collect();
