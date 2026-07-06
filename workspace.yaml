@@ -4,9 +4,13 @@ workspace:
   members:
     - "."
     - "libs/parsing"
+    - "libs/yaml-parse"
     - "libs/mylib"
     - "macros/hello_macro"
   
+  dependencies:
+    parsing: "workspace"
+    
   profiles:
     debug:
       target: "target/debug"

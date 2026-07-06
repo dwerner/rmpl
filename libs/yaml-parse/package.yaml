@@ -1,0 +1,11 @@
+package:
+  name: "yaml-parse"
+  version: "0.1.0"
+  edition: "2021"
+  description: "YAML parser built on parsing library"
+
+lib:
+  path: "src/lib.rs"
+
+dependencies:
+  parsing: "workspace"

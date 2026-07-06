@@ -64,8 +64,8 @@ where
 }
 
 /// Parse characters until the delimiter is found
-pub fn take_until<'a>(delim: &'a str) -> impl Fn(Input<'a>) -> ParseResult<'a, &str> + 'a {
-    move |input: Input<'a>| -> ParseResult<'a, &str> {
+pub fn take_until<'a>(delim: &'a str) -> impl Fn(Input<'a>) -> ParseResult<'a, &'a str> + 'a {
+    move |input: Input<'a>| -> ParseResult<'a, &'a str> {
         match input.find(delim) {
             Some(pos) => Ok((&input[pos..], &input[..pos])),
             None => Err(error_at(input, &format!("expected '{}' not found", delim), 0)),

@@ -33,15 +33,32 @@ pub fn build_workspace_with_profile(profile: &str) -> Result<(), String> {
             .ok_or_else(|| format!("Package not found: {}", package_name))?;
         
         println!("\nBuilding {}...", package.name);
-        build_package(package, &target_dir, profile)?;
+        build_package(package, &target_dir, profile, &workspace)?;
     }
     
     println!("\nBuild complete!");
     Ok(())
 }
 
-fn build_package(package: &crate::resolver::ResolvedPackage, target_dir: &PathBuf, profile: &str) -> Result<(), String> {
+fn build_package(
+    package: &crate::resolver::ResolvedPackage, 
+    target_dir: &PathBuf, 
+    profile: &str,
+    workspace: &crate::resolver::ResolvedWorkspace,
+) -> Result<(), String> {
     let lib_name = package.manifest.name.replace('-', "_");
+    
+    // Collect all library dependencies for this package
+    let mut dep_libs = Vec::new();
+    for dep in &package.dependencies {
+        let dep_name = dep.split(' ').next().unwrap_or(dep);
+        if let Some(dep_pkg) = workspace.packages.get(dep_name) {
+            if dep_pkg.manifest.lib.is_some() {
+                let dep_lib_name = dep_name.replace('-', "_");
+                dep_libs.push((dep_lib_name, dep_name.to_string()));
+            }
+        }
+    }
     
     // Build library if present
     if let Some(lib) = &package.manifest.lib {
@@ -75,6 +92,16 @@ fn build_package(package: &crate::resolver::ResolvedPackage, target_dir: &PathBu
                .arg(&source_path)
                .arg("--edition")
                .arg(&package.manifest.edition);
+            
+            // Add library dependencies
+            let deps_dir = target_dir.join("deps");
+            for (dep_lib_name, _) in &dep_libs {
+                cmd.arg("-L").arg(format!("{}={}", deps_dir.display(), deps_dir.display()));
+                let dep_rlib = deps_dir.join(format!("lib{}.rlib", dep_lib_name));
+                if dep_rlib.exists() {
+                    cmd.arg("--extern").arg(format!("{}={}", dep_lib_name, dep_rlib.display()));
+                }
+            }
             
             // Proc macros use --out-dir only, regular libs use -o
             if package.manifest.proc_macro {
@@ -136,6 +163,16 @@ fn build_package(package: &crate::resolver::ResolvedPackage, target_dir: &PathBu
             let deps_dir = target_dir.join("deps");
             cmd.arg("-L").arg(format!("{}={}", deps_dir.display(), deps_dir.display()));
             cmd.arg("--extern").arg(format!("{}={}", lib_name, deps_dir.join(format!("lib{}.rlib", lib_name)).display()));
+        }
+        
+        // Link against workspace dependencies
+        let deps_dir = target_dir.join("deps");
+        for (dep_lib_name, _) in &dep_libs {
+            cmd.arg("-L").arg(format!("{}={}", deps_dir.display(), deps_dir.display()));
+            let dep_rlib = deps_dir.join(format!("lib{}.rlib", dep_lib_name));
+            if dep_rlib.exists() {
+                cmd.arg("--extern").arg(format!("{}={}", dep_lib_name, dep_rlib.display()));
+            }
         }
         
         if profile == "release" {
