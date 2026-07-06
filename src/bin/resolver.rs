@@ -115,7 +115,9 @@ impl ResolvedWorkspace {
             Ok(())
         }
         
-        for name in packages.keys() {
+        let mut names: Vec<&String> = packages.keys().collect();
+        names.sort();
+        for name in names {
             if !visited.contains_key(name) {
                 visit(name, packages, &mut visited, &mut order)?;
             }

@@ -7,6 +7,8 @@ workspace:
     - "libs/yaml-parse"
     - "libs/mylib"
     - "macros/hello_macro"
+    - "libs/syn-lite"
+    - "libs/quote-lite"
   
   dependencies:
     parsing: "workspace"

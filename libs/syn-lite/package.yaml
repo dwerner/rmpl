@@ -1,0 +1,12 @@
+package:
+  name: "syn-lite"
+  version: "0.1.0"
+  edition: "2021"
+  description: "Minimal Rust syntax parsing for proc macros"
+
+lib:
+  path: "src/lib.rs"
+
+proc_macro: false
+
+dependencies: {}

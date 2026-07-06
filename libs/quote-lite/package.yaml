@@ -1,0 +1,12 @@
+package:
+  name: "quote-lite"
+  version: "0.1.0"
+  edition: "2021"
+  description: "Minimal Rust code generation for proc macros"
+
+lib:
+  path: "src/lib.rs"
+
+proc_macro: false
+
+dependencies: {}
