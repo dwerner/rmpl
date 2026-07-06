@@ -3,6 +3,7 @@ workspace:
   name: "rmpl"
   members:
     - "."
+    - "libs/parsing"
     - "libs/mylib"
     - "macros/hello_macro"
   

@@ -1,0 +1,10 @@
+package:
+  name: "parsing"
+  version: "0.1.0"
+  edition: "2021"
+  description: "Generic parser combinator library"
+
+lib:
+  path: "src/lib.rs"
+
+dependencies: {}
