@@ -9,9 +9,16 @@ workspace:
     - "macros/hello_macro"
     - "libs/syn-lite"
     - "libs/quote-lite"
+    - "libs/serduh-core"
+    - "libs/serduh-yaml"
+    - "libs/serduh-derive"
   
   dependencies:
     parsing: "workspace"
+    serduh-core: "workspace"
+    yaml-parse: "workspace"
+    syn-lite: "workspace"
+    quote-lite: "workspace"
     
   profiles:
     debug:

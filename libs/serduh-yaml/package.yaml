@@ -1,0 +1,14 @@
+package:
+  name: "serduh-yaml"
+  version: "0.1.0"
+  edition: "2021"
+  description: "YAML implementation for serduh"
+
+lib:
+  path: "src/lib.rs"
+
+proc_macro: false
+
+dependencies:
+  serduh-core: "workspace"
+  yaml-parse: "workspace"

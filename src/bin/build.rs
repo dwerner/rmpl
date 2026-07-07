@@ -48,17 +48,43 @@ fn build_package(
 ) -> Result<(), String> {
     let lib_name = package.manifest.name.replace('-', "_");
     
-    // Collect all library dependencies for this package
+    // Collect all library dependencies for this package (including transitive)
     let mut dep_libs = Vec::new();
-    for dep in &package.dependencies {
-        let dep_name = dep.split(' ').next().unwrap_or(dep);
+    let mut visited = std::collections::HashSet::new();
+    
+    fn collect_deps(
+        dep_name: &str, 
+        workspace: &crate::resolver::ResolvedWorkspace, 
+        dep_libs: &mut Vec<(String, String)>,
+        visited: &mut std::collections::HashSet<String>
+    ) {
+        if visited.contains(dep_name) {
+            return;
+        }
+        visited.insert(dep_name.to_string());
+        
         if let Some(dep_pkg) = workspace.packages.get(dep_name) {
             if dep_pkg.manifest.lib.is_some() {
                 let dep_lib_name = dep_name.replace('-', "_");
                 dep_libs.push((dep_lib_name, dep_name.to_string()));
             }
+            // Recursively collect transitive dependencies
+            for dep in &dep_pkg.dependencies {
+                let sub_dep = dep.split(' ').next().unwrap_or(dep);
+                collect_deps(sub_dep, workspace, dep_libs, visited);
+            }
         }
     }
+    
+    for dep in &package.dependencies {
+        let dep_name = dep.split(' ').next().unwrap_or(dep);
+        collect_deps(dep_name, workspace, &mut dep_libs, &mut visited);
+    }
+    
+    // Remove duplicates while preserving order
+    let mut seen = std::collections::HashSet::new();
+    dep_libs.retain(|(name, _)| seen.insert(name.clone()));
+    
     
     // Build library if present
     if let Some(lib) = &package.manifest.lib {
@@ -96,10 +122,11 @@ fn build_package(
             // Add library dependencies
             let deps_dir = target_dir.join("deps");
             for (dep_lib_name, _) in &dep_libs {
-                cmd.arg("-L").arg(format!("{}={}", deps_dir.display(), deps_dir.display()));
+                cmd.arg("-L").arg(format!("dependency={}", deps_dir.display()));
                 let dep_rlib = deps_dir.join(format!("lib{}.rlib", dep_lib_name));
                 if dep_rlib.exists() {
-                    cmd.arg("--extern").arg(format!("{}={}", dep_lib_name, dep_rlib.display()));
+                    let extern_arg = format!("{}={}", dep_lib_name, dep_rlib.display());
+                    cmd.arg("--extern").arg(&extern_arg);
                 }
             }
             

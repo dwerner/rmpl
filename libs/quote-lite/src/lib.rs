@@ -101,7 +101,7 @@ impl Ident {
     }
 }
 
-/// Builder for generating code
+/// Builder for generating code (fluent API)
 pub struct Tokens {
     stream: TokenStream,
 }
@@ -218,6 +218,48 @@ impl TokenStream {
     pub fn iter(&self) -> std::slice::Iter<Token> {
         self.tokens.iter()
     }
+}
+
+// ============ MACROS ============
+
+/// Simple quote macro that concatenates tokens
+/// 
+/// This is a simplified version that just collects tokens into a stream.
+/// For variable interpolation, use the `Tokens` builder instead.
+#[macro_export]
+macro_rules! quote {
+    () => { $crate::TokenStream::new() };
+    
+    // Pass through tokens as identifiers (simple case)
+    ($($tt:tt)*) => {{
+        let mut ts = $crate::TokenStream::new();
+        $crate::quote_add!(ts, $($tt)*);
+        ts
+    }};
+}
+
+/// Helper macro to add tokens - simplified to just use tt
+#[macro_export]
+macro_rules! quote_add {
+    ($ts:ident, :: $($rest:tt)*) => {
+        $ts.push_punct(':');
+        $ts.push_punct(':');
+        $crate::quote_add!($ts, $($rest)*);
+    };
+    ($ts:ident, $x:ident $($rest:tt)*) => {
+        $ts.push_ident(stringify!($x));
+        $crate::quote_add!($ts, $($rest)*);
+    };
+    ($ts:ident, $x:literal $($rest:tt)*) => {
+        $ts.push_literal(stringify!($x));
+        $crate::quote_add!($ts, $($rest)*);
+    };
+    ($ts:ident, $x:tt $($rest:tt)*) => {
+        $ts.push_ident(stringify!($x));
+        $crate::quote_add!($ts, $($rest)*);
+    };
+    ($ts:ident,) => {};
+    ($ts:ident) => {};
 }
 
 #[cfg(test)]
@@ -467,5 +509,46 @@ mod tests {
 
         let count = ts.iter().count();
         assert_eq!(count, 3);
+    }
+
+    // ============ QUOTE MACRO TESTS ============
+
+    #[test]
+    fn test_quote_empty() {
+        let ts = quote! {};
+        assert!(ts.is_empty());
+    }
+
+    #[test]
+    fn test_quote_simple() {
+        let ts = quote! { fn main {} };
+        let s = tokens_to_string(&ts);
+        assert!(s.contains("fn"));
+        assert!(s.contains("main"));
+    }
+
+    #[test]
+    fn test_quote_struct() {
+        let ts = quote! { struct Point { x: i32 } };
+        let s = tokens_to_string(&ts);
+        assert!(s.contains("struct"));
+        assert!(s.contains("Point"));
+    }
+
+    #[test]
+    fn test_quote_impl() {
+        let ts = quote! { impl MyType { fn foo {} } };
+        let s = tokens_to_string(&ts);
+        assert!(s.contains("impl"));
+        assert!(s.contains("MyType"));
+    }
+
+    #[test]
+    fn test_quote_path() {
+        let ts = quote! { std :: vec :: Vec };
+        let s = tokens_to_string(&ts);
+        assert!(s.contains("std"));
+        assert!(s.contains("vec"));
+        assert!(s.contains("Vec"));
     }
 }

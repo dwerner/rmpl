@@ -1,0 +1,12 @@
+package:
+  name: "serduh-core"
+  version: "0.1.0"
+  edition: "2021"
+  description: "Core traits for serduh serialization framework"
+
+lib:
+  path: "src/lib.rs"
+
+proc_macro: false
+
+dependencies: {}

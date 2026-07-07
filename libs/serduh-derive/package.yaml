@@ -1,0 +1,15 @@
+package:
+  name: "serduh-derive"
+  version: "0.1.0"
+  edition: "2021"
+  description: "Derive macros for serduh"
+  proc-macro: true
+
+lib:
+  path: "src/lib.rs"
+
+dependencies:
+  serduh-core: "workspace"
+  syn-lite: "workspace"
+  quote-lite: "workspace"
+  proc-macro: "builtin"
