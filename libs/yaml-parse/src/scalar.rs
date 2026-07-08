@@ -1,6 +1,6 @@
 //! Scalar value parsing for YAML
 
-use parsing::{Input, ParseResult, tag, take_while, opt, error_at, map};
+use parsing::{Input, ParseResult, tag, take_while, take_while1, opt, map, pair, error_at};
 
 /// YAML scalar value
 #[derive(Debug, Clone, PartialEq)]
@@ -15,9 +15,8 @@ pub enum Value {
 }
 
 /// Parse a quoted string (double or single quotes)
-pub fn quoted_string() -> impl Fn(Input) -> ParseResult<'_, String> {
-    move |input: Input| -> ParseResult<'_, String> {
-        // Try double quotes
+pub fn quoted_string<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, String> {
+    move |input: Input<'a>| -> ParseResult<'a, String> {
         if input.starts_with('"') {
             let inner = &input[1..];
             match inner.find('"') {
@@ -27,9 +26,7 @@ pub fn quoted_string() -> impl Fn(Input) -> ParseResult<'_, String> {
                 }
                 None => Err(error_at(input, "unterminated double-quoted string", 0)),
             }
-        }
-        // Try single quotes
-        else if input.starts_with('\'') {
+        } else if input.starts_with('\'') {
             let inner = &input[1..];
             match inner.find('\'') {
                 Some(pos) => {
@@ -38,16 +35,15 @@ pub fn quoted_string() -> impl Fn(Input) -> ParseResult<'_, String> {
                 }
                 None => Err(error_at(input, "unterminated single-quoted string", 0)),
             }
-        }
-        else {
+        } else {
             Err(error_at(input, "expected quoted string", 0))
         }
     }
 }
 
-/// Parse an unquoted scalar (stops at : whitespace, or newline)
-pub fn unquoted_scalar() -> impl Fn(Input) -> ParseResult<'_, &str> {
-    move |input: Input| -> ParseResult<'_, &str> {
+/// Parse an unquoted scalar (stops at :, whitespace, newline, etc.)
+pub fn unquoted_scalar<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, &'a str> {
+    move |input: Input<'a>| -> ParseResult<'a, &'a str> {
         let result = take_while(|c| c != ':' && c != '\n' && c != '\r' && c != '#' && c != ',' && c != ' ')(input);
         match result {
             Ok((rest, val)) => Ok((rest, val.trim())),
@@ -57,8 +53,8 @@ pub fn unquoted_scalar() -> impl Fn(Input) -> ParseResult<'_, &str> {
 }
 
 /// Parse a boolean value
-pub fn boolean() -> impl Fn(Input) -> ParseResult<'_, bool> {
-    move |input: Input| -> ParseResult<'_, bool> {
+pub fn boolean<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, bool> {
+    move |input: Input<'a>| -> ParseResult<'a, bool> {
         if input.starts_with("true") {
             Ok((&input[4..], true))
         } else if input.starts_with("false") {
@@ -70,30 +66,29 @@ pub fn boolean() -> impl Fn(Input) -> ParseResult<'_, bool> {
 }
 
 /// Parse a number (integer)
-pub fn number() -> impl Fn(Input) -> ParseResult<'_, u64> {
-    move |input: Input| -> ParseResult<'_, u64> {
-        let result = take_while(|c| c.is_ascii_digit());
+pub fn number<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, u64> {
+    move |input: Input<'a>| -> ParseResult<'a, u64> {
+        let result = take_while1(|c| c.is_ascii_digit());
         match result(input) {
-            Ok((rest, digits)) if !digits.is_empty() => {
+            Ok((rest, digits)) => {
                 match digits.parse::<u64>() {
                     Ok(n) => Ok((rest, n)),
                     Err(_) => Err(error_at(input, "invalid number", 0)),
                 }
             }
-            Ok((_rest, _)) => Err(error_at(input, "expected number", 0)),
-            Err(e) => Err(e),
+            Err(_) => Err(error_at(input, "expected number", 0)),
         }
     }
 }
 
 /// Parse a float number
-pub fn float() -> impl Fn(Input) -> ParseResult<'_, f64> {
-    move |input: Input| -> ParseResult<'_, f64> {
-        let integer_part = take_while(|c| c.is_ascii_digit());
-        let decimal_part = parsing::pair(tag("."), take_while(|c| c.is_ascii_digit()));
+pub fn float<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, f64> {
+    move |input: Input<'a>| -> ParseResult<'a, f64> {
+        let integer_part = take_while1(|c| c.is_ascii_digit());
+        let decimal_part = pair(tag("."), take_while(|c| c.is_ascii_digit()));
         
         let float_parser = map(
-            parsing::pair(integer_part, opt(decimal_part)),
+            pair(integer_part, opt(decimal_part)),
             |(int, dec)| {
                 let s = if let Some((_, digits)) = dec {
                     format!("{}.{}", int, digits)
@@ -109,8 +104,8 @@ pub fn float() -> impl Fn(Input) -> ParseResult<'_, f64> {
 }
 
 /// Parse a null value
-pub fn null() -> impl Fn(Input) -> ParseResult<'_, ()> {
-    move |input: Input| -> ParseResult<'_, ()> {
+pub fn null<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, ()> {
+    move |input: Input<'a>| -> ParseResult<'a, ()> {
         let null_parser = map(tag("null"), |_| ());
         let tilde_parser = map(tag("~"), |_| ());
         
@@ -122,9 +117,8 @@ pub fn null() -> impl Fn(Input) -> ParseResult<'_, ()> {
 }
 
 /// Parse any scalar value
-pub fn scalar() -> impl Fn(Input) -> ParseResult<'_, Value> {
-    move |input: Input| -> ParseResult<'_, Value> {
-        // Try quoted string first
+pub fn scalar<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, Value> {
+    move |input: Input<'a>| -> ParseResult<'a, Value> {
         if input.starts_with('"') || input.starts_with('\'') {
             match quoted_string()(input) {
                 Ok((rest, s)) => return Ok((rest, Value::String(s))),
@@ -132,7 +126,6 @@ pub fn scalar() -> impl Fn(Input) -> ParseResult<'_, Value> {
             }
         }
         
-        // Try null
         if input.starts_with("null") || input.starts_with('~') {
             match null()(input) {
                 Ok((rest, ())) => return Ok((rest, Value::Null)),
@@ -140,13 +133,11 @@ pub fn scalar() -> impl Fn(Input) -> ParseResult<'_, Value> {
             }
         }
         
-        // Try boolean
         match boolean()(input) {
             Ok((rest, b)) => return Ok((rest, Value::Bool(b))),
             Err(_) => {}
         }
         
-        // Try float (must check before integer to handle decimals)
         if input.chars().next().map(|c| c.is_ascii_digit() || c == '.').unwrap_or(false) {
             if input.contains('.') {
                 match float()(input) {
@@ -155,14 +146,12 @@ pub fn scalar() -> impl Fn(Input) -> ParseResult<'_, Value> {
                 }
             }
             
-            // Try integer
             match number()(input) {
                 Ok((rest, n)) => return Ok((rest, Value::Number(n))),
                 Err(_) => {}
             }
         }
         
-        // Fall back to unquoted string
         match unquoted_scalar()(input) {
             Ok((rest, s)) => {
                 if s.is_empty() {
@@ -252,3 +241,27 @@ mod tests {
         assert_eq!(result, Ok(("", Value::Null)));
     }
 }
+
+    #[test]
+    fn test_float() {
+        let result = float()("3.14");
+        assert_eq!(result, Ok(("", 3.14)));
+    }
+
+    #[test]
+    fn test_scalar_float() {
+        let result = scalar()("3.14");
+        assert_eq!(result, Ok(("", Value::Float(3.14))));
+    }
+
+    #[test]
+    fn test_quoted_string_escaped() {
+        let result = quoted_string()("\"hello\"world\"");
+        assert_eq!(result, Ok(("", "hello\"world".to_string())));
+    }
+
+    #[test]
+    fn test_unquoted_with_space() {
+        let result = unquoted_scalar()("hello world more");
+        assert_eq!(result, Ok((" world more", "hello")));
+    }

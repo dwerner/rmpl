@@ -25,7 +25,7 @@ pub fn run_tests(workspace_root: PathBuf, filter: Option<&str>) -> Result<(), St
         
         println!("\nTesting {}...", package.name);
         
-        let (pkg_passed, pkg_failed, pkg_tests) = run_package_tests(package, filter)?;
+        let (pkg_passed, pkg_failed, pkg_tests) = run_package_tests(package, &workspace, filter)?;
         passed += pkg_passed;
         failed += pkg_failed;
         total_tests += pkg_tests;
@@ -40,7 +40,11 @@ pub fn run_tests(workspace_root: PathBuf, filter: Option<&str>) -> Result<(), St
     }
 }
 
-fn run_package_tests(package: &crate::resolver::ResolvedPackage, filter: Option<&str>) -> Result<(usize, usize, usize), String> {
+fn run_package_tests(
+    package: &crate::resolver::ResolvedPackage, 
+    workspace: &crate::resolver::ResolvedWorkspace,
+    filter: Option<&str>
+) -> Result<(usize, usize, usize), String> {
     let mut passed = 0;
     let mut failed = 0;
     let mut total = 0;
@@ -53,7 +57,7 @@ fn run_package_tests(package: &crate::resolver::ResolvedPackage, filter: Option<
     // 1. Run inline tests from lib.rs if present
     if let Some(lib) = &package.manifest.lib {
         if !package.manifest.proc_macro {
-            let (lib_passed, lib_failed, lib_total) = run_inline_tests(package, lib, filter)?;
+            let (lib_passed, lib_failed, lib_total) = run_inline_tests(package, lib, workspace, filter)?;
             passed += lib_passed;
             failed += lib_failed;
             total += lib_total;
@@ -61,7 +65,7 @@ fn run_package_tests(package: &crate::resolver::ResolvedPackage, filter: Option<
     }
     
     // 2. Run integration tests from tests/ directory
-    let (int_passed, int_failed, int_total) = run_integration_tests(package, filter)?;
+    let (int_passed, int_failed, int_total) = run_integration_tests(package, workspace, filter)?;
     passed += int_passed;
     failed += int_failed;
     total += int_total;
@@ -69,7 +73,12 @@ fn run_package_tests(package: &crate::resolver::ResolvedPackage, filter: Option<
     Ok((passed, failed, total))
 }
 
-fn run_inline_tests(package: &crate::resolver::ResolvedPackage, lib: &crate::manifest::LibraryTarget, filter: Option<&str>) -> Result<(usize, usize, usize), String> {
+fn run_inline_tests(
+    package: &crate::resolver::ResolvedPackage, 
+    lib: &crate::manifest::LibraryTarget, 
+    workspace: &crate::resolver::ResolvedWorkspace,
+    filter: Option<&str>
+) -> Result<(usize, usize, usize), String> {
     let manifest_dir = package.manifest_path.parent().unwrap_or(&package.path);
     let source_path = manifest_dir.join(&lib.path);
     
@@ -97,6 +106,49 @@ fn run_inline_tests(package: &crate::resolver::ResolvedPackage, lib: &crate::man
         .map_err(|e| format!("Failed to create deps dir: {}", e))?;
     
     cmd.arg("--out-dir").arg(&deps_dir);
+    
+    // Add library dependencies
+    let mut dep_libs = Vec::new();
+    let mut _visited: std::collections::HashSet<String> = std::collections::HashSet::new();
+    
+    fn collect_deps(
+        dep_name: &str, 
+        workspace: &crate::resolver::ResolvedWorkspace, 
+        dep_libs: &mut Vec<(String, String)>,
+        visited: &mut std::collections::HashSet<String>
+    ) {
+        if visited.contains(dep_name) {
+            return;
+        }
+        visited.insert(dep_name.to_string());
+        
+        if let Some(dep_pkg) = workspace.packages.get(dep_name) {
+            if dep_pkg.manifest.lib.is_some() {
+                let dep_lib_name = dep_name.replace('-', "_");
+                dep_libs.push((dep_lib_name, dep_name.to_string()));
+            }
+            for dep in &dep_pkg.dependencies {
+                let sub_dep = dep.split(' ').next().unwrap_or(dep);
+                collect_deps(sub_dep, workspace, dep_libs, visited);
+            }
+        }
+    }
+    
+    for dep in &package.dependencies {
+        let dep_name = dep.split(' ').next().unwrap_or(dep);
+        collect_deps(dep_name, workspace, &mut dep_libs, &mut _visited);
+    }
+    
+    let mut seen = std::collections::HashSet::new();
+    dep_libs.retain(|(name, _)| seen.insert(name.clone()));
+    
+    for (dep_lib_name, _) in &dep_libs {
+        cmd.arg("-L").arg(format!("dependency={}", deps_dir.display()));
+        let dep_rlib = deps_dir.join(format!("lib{}.rlib", dep_lib_name));
+        if dep_rlib.exists() {
+            cmd.arg("--extern").arg(format!("{}={}", dep_lib_name, dep_rlib.display()));
+        }
+    }
     
     let result = cmd.output()
         .map_err(|e| format!("Failed to invoke rustc: {}", e))?;
@@ -135,7 +187,11 @@ fn run_inline_tests(package: &crate::resolver::ResolvedPackage, lib: &crate::man
     Ok((pkg_passed, pkg_failed, pkg_passed + pkg_failed))
 }
 
-fn run_integration_tests(package: &crate::resolver::ResolvedPackage, filter: Option<&str>) -> Result<(usize, usize, usize), String> {
+fn run_integration_tests(
+    package: &crate::resolver::ResolvedPackage, 
+    workspace: &crate::resolver::ResolvedWorkspace,
+    filter: Option<&str>
+) -> Result<(usize, usize, usize), String> {
     let manifest_dir = package.manifest_path.parent().unwrap_or(&package.path);
     let tests_dir = manifest_dir.join("tests");
     
@@ -182,13 +238,37 @@ fn run_integration_tests(package: &crate::resolver::ResolvedPackage, filter: Opt
         
         cmd.arg("--out-dir").arg(&deps_dir);
         
-        // Link against library if present
-        if let Some(lib) = &package.manifest.lib {
-            let lib_name = package.manifest.name.replace('-', "_");
-            let lib_path = deps_dir.join(format!("lib{}.rlib", lib_name));
-            if lib_path.exists() {
-                cmd.arg("-L").arg(format!("{}={}", deps_dir.display(), deps_dir.display()));
-                cmd.arg("--extern").arg(format!("{}={}", lib_name, lib_path.display()));
+        // Add library dependencies
+        let mut dep_libs = Vec::new();
+        let mut _visited: std::collections::HashSet<String> = std::collections::HashSet::new();
+        
+        for dep in &package.dependencies {
+            let dep_name = dep.split(' ').next().unwrap_or(dep);
+            if let Some(dep_pkg) = workspace.packages.get(dep_name) {
+                if dep_pkg.manifest.lib.is_some() {
+                    let dep_lib_name = dep_name.replace('-', "_");
+                    dep_libs.push((dep_lib_name, dep_name.to_string()));
+                }
+                for sub_dep in &dep_pkg.dependencies {
+                    let sub_name = sub_dep.split(' ').next().unwrap_or(sub_dep);
+                    if let Some(sub_pkg) = workspace.packages.get(sub_name) {
+                        if sub_pkg.manifest.lib.is_some() {
+                            let sub_lib_name = sub_name.replace('-', "_");
+                            dep_libs.push((sub_lib_name, sub_name.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+        
+        let mut seen = std::collections::HashSet::new();
+        dep_libs.retain(|(name, _)| seen.insert(name.clone()));
+        
+        for (dep_lib_name, _) in &dep_libs {
+            cmd.arg("-L").arg(format!("dependency={}", deps_dir.display()));
+            let dep_rlib = deps_dir.join(format!("lib{}.rlib", dep_lib_name));
+            if dep_rlib.exists() {
+                cmd.arg("--extern").arg(format!("{}={}", dep_lib_name, dep_rlib.display()));
             }
         }
         

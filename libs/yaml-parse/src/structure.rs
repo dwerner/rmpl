@@ -1,27 +1,27 @@
 //! Structure parsing for YAML (key-value, lists, blocks)
 
 use crate::scalar::{scalar, Value};
-use parsing::{Input, ParseResult, ParseError, error_at};
+use parsing::{Input, ParseResult, error_at};
 
 /// Parse whitespace (spaces and tabs, not newlines)
-pub fn indent() -> impl Fn(Input) -> ParseResult<'_, usize> {
-    move |input: Input| -> ParseResult<'_, usize> {
+pub fn indent<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, usize> {
+    move |input: Input<'a>| -> ParseResult<'a, usize> {
         let count = input.chars().take_while(|c| *c == ' ' || *c == '\t').count();
         Ok((&input[count..], count))
     }
 }
 
 /// Parse inline whitespace
-pub fn ws() -> impl Fn(Input) -> ParseResult<'_, &str> {
-    move |input: Input| -> ParseResult<'_, &str> {
+pub fn ws<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, &'a str> {
+    move |input: Input<'a>| -> ParseResult<'a, &'a str> {
         let count = input.chars().take_while(|c| *c == ' ' || *c == '\t').count();
         Ok((&input[count..], &input[..count]))
     }
 }
 
 /// Parse a comment (from # to end of line)
-pub fn comment() -> impl Fn(Input) -> ParseResult<'_, ()> {
-    move |input: Input| -> ParseResult<'_, ()> {
+pub fn comment<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, ()> {
+    move |input: Input<'a>| -> ParseResult<'a, ()> {
         if !input.starts_with('#') {
             return Ok((input, ()));
         }
@@ -33,14 +33,12 @@ pub fn comment() -> impl Fn(Input) -> ParseResult<'_, ()> {
 }
 
 /// Parse key-value pair: `key: value`
-pub fn key_value() -> impl Fn(Input) -> ParseResult<'_, (String, Value)> {
-    move |input: Input| -> ParseResult<'_, (String, Value)> {
-        // Parse key (unquoted identifier)
+pub fn key_value<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, (String, Value)> {
+    move |input: Input<'a>| -> ParseResult<'a, (String, Value)> {
         let key_end = input.find(':').ok_or_else(|| error_at(input, "expected ':' in key-value pair", 0))?;
         let key = input[..key_end].trim().to_string();
         let rest = &input[key_end..];
         
-        // Parse colon and optional space
         let after_colon = if rest.starts_with(":") {
             let rest = &rest[1..];
             rest.trim_start()
@@ -48,13 +46,9 @@ pub fn key_value() -> impl Fn(Input) -> ParseResult<'_, (String, Value)> {
             return Err(error_at(input, "expected ':' after key", 0));
         };
         
-        // Check if value is on next line (nested block)
         if after_colon.starts_with('\n') || after_colon.is_empty() {
-            // Value is a nested block - need to handle this differently
-            // For now, return empty map as placeholder
             Ok((after_colon, (key, Value::Map(vec![]))))
         } else {
-            // Parse value on same line
             let (rest_after_val, value) = scalar()(after_colon)?;
             Ok((rest_after_val, (key, value)))
         }
@@ -62,8 +56,8 @@ pub fn key_value() -> impl Fn(Input) -> ParseResult<'_, (String, Value)> {
 }
 
 /// Parse a list item: `- value`
-pub fn list_item() -> impl Fn(Input) -> ParseResult<'_, Value> {
-    move |input: Input| -> ParseResult<'_, Value> {
+pub fn list_item<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, Value> {
+    move |input: Input<'a>| -> ParseResult<'a, Value> {
         if !input.starts_with('-') {
             return Err(error_at(input, "expected list item starting with '-'", 0));
         }
@@ -71,14 +65,13 @@ pub fn list_item() -> impl Fn(Input) -> ParseResult<'_, Value> {
         let after_dash = &input[1..];
         let after_space = after_dash.trim_start();
         
-        // Parse the value
         scalar()(after_space)
     }
 }
 
 /// Parse a list: multiple `- value` items
-pub fn list() -> impl Fn(Input) -> ParseResult<'_, Vec<Value>> {
-    move |mut input: Input| -> ParseResult<'_, Vec<Value>> {
+pub fn list<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, Vec<Value>> {
+    move |mut input: Input<'a>| -> ParseResult<'a, Vec<Value>> {
         let mut items = Vec::new();
         
         while input.starts_with('-') {
@@ -92,13 +85,12 @@ pub fn list() -> impl Fn(Input) -> ParseResult<'_, Vec<Value>> {
 }
 
 /// Parse a block (key-value pairs at same indentation level)
-pub fn block() -> impl Fn(Input) -> ParseResult<'_, Vec<(String, Value)>> {
-    move |input: Input| -> ParseResult<'_, Vec<(String, Value)>> {
+pub fn block<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, Vec<(String, Value)>> {
+    move |input: Input<'a>| -> ParseResult<'a, Vec<(String, Value)>> {
         let mut pairs = Vec::new();
         let mut remaining = input;
         
         while let Some(colon_pos) = remaining.find(':') {
-            // Check if this is actually a key-value (not inside a string)
             let before_colon = &remaining[..colon_pos];
             if before_colon.trim().is_empty() || before_colon.trim().starts_with('#') {
                 break;
@@ -118,12 +110,10 @@ pub fn block() -> impl Fn(Input) -> ParseResult<'_, Vec<(String, Value)>> {
 }
 
 /// Parse a complete YAML document
-pub fn document() -> impl Fn(Input) -> ParseResult<'_, Value> {
-    move |input: Input| -> ParseResult<'_, Value> {
-        // Skip leading whitespace and comments
+pub fn document<'a>() -> impl Fn(Input<'a>) -> ParseResult<'a, Value> {
+    move |input: Input<'a>| -> ParseResult<'a, Value> {
         let remaining = input.trim_start();
         
-        // Check if it's a list or a map
         if remaining.starts_with('-') {
             let (rest, items) = list()(remaining)?;
             Ok((rest, Value::List(items)))
@@ -135,7 +125,7 @@ pub fn document() -> impl Fn(Input) -> ParseResult<'_, Value> {
 }
 
 /// Parse a YAML file content into a Value
-pub fn parse(input: &str) -> Result<Value, ParseError> {
+pub fn parse(input: &str) -> Result<Value, parsing::ParseError> {
     match document()(input) {
         Ok((_, value)) => Ok(value),
         Err(e) => Err(e),
@@ -213,3 +203,45 @@ mod tests {
         assert!(result.is_ok());
     }
 }
+
+    #[test]
+    fn test_comment() {
+        let result = comment()("# this is a comment\nrest");
+        assert_eq!(result, Ok(("\nrest", ())));
+    }
+
+    #[test]
+    fn test_document_list() {
+        let result = document()("- item1\n- item2");
+        assert!(result.is_ok());
+        let (_, value) = result.unwrap();
+        match value {
+            Value::List(items) => assert_eq!(items.len(), 2),
+            _ => panic!("Expected list"),
+        }
+    }
+
+    #[test]
+    fn test_document_map() {
+        let result = document()("key: value");
+        assert!(result.is_ok());
+        let (_, value) = result.unwrap();
+        match value {
+            Value::Map(pairs) => assert_eq!(pairs.len(), 1),
+            _ => panic!("Expected map"),
+        }
+    }
+
+    #[test]
+    fn test_parse_complex() {
+        let yaml = "name: Alice\nage: 30\nactive: true";
+        let result = parse(yaml);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_with_comments() {
+        let yaml = "# comment\nname: test";
+        let result = parse(yaml);
+        assert!(result.is_ok());
+    }
