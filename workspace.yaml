@@ -19,6 +19,8 @@ workspace:
     yaml-parse: "workspace"
     syn-lite: "workspace"
     quote-lite: "workspace"
+    serduh-yaml: "workspace"
+    serduh-derive: "workspace proc-macro"
     
   profiles:
     debug:

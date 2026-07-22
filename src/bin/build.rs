@@ -85,7 +85,6 @@ fn build_package(
     let mut seen = std::collections::HashSet::new();
     dep_libs.retain(|(name, _)| seen.insert(name.clone()));
     
-    
     // Build library if present
     if let Some(lib) = &package.manifest.lib {
         let manifest_dir = package.manifest_path.parent().unwrap_or(&package.path);

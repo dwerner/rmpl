@@ -24,7 +24,6 @@ pub struct ResolvedWorkspace {
 impl ResolvedWorkspace {
     pub fn resolve(workspace_root: PathBuf) -> Result<Self, String> {
         let manifest = WorkspaceManifest::load(workspace_root.join("workspace.yaml"))?;
-        
         let mut packages = HashMap::new();
         
         // Resolve each member package
